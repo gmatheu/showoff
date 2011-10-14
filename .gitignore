@@ -29,3 +29,7 @@ dist
 *.ipr
 *.iml
 *.iws
+
+## Example products
+example/static
+example/beamer
