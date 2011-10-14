@@ -168,6 +168,15 @@ command [:static] do |c|
   end
 end
 
+desc 'Generate latex beamer version of presentation'
+arg_name 'name'
+long_desc 'Creates a beamer (latex) version of the presentation as {name}.tex'
+command [:beamer] do |c|
+  c.action do |global_options,options,args|
+    ShowOff.do_beamer(args[0])
+  end
+end
+
 pre do |global,command,options,args|
   # Pre logic here
   # Return true to proceed; false to abourt and not call the

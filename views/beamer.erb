@@ -1,0 +1,90 @@
+\documentclass[9pt]{beamer}
+
+\usepackage[full]{textcomp}
+\usepackage{listings}
+\usepackage[spanish]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage[utf8]{inputenc}
+
+\mode<presentation> {
+  \usetheme{Warsaw}
+  \setbeamercovered{transparent}
+}
+
+\setbeamertemplate{background canvas}[vertical shading][bottom=white,top=structure.fg!25]
+\beamertemplatenavigationsymbolsempty
+\useoutertheme{smoothtree}
+
+\title[<%= @title %>]{<%= @title %>}
+\subtitle{Parte I}
+
+\author[Gonzalo Matheu]
+{%
+Gonzalo Matheu \inst{1}\\[-2mm]
+\texttt{\tiny gmatheu@ascentio.com.ar}\\
+}
+
+\institute[Ascentio Technologies S.A.]
+{%
+  \inst{1}%
+    Desarrollador\vspace{-2mm}
+}
+
+\date{\today} %
+
+\subject{<%= @title %>}
+
+\pgfdeclareimage[height=1cm]{maven-logo}{images/Maven_logo.jpg}
+\titlegraphic{\pgfuseimage{maven-logo}}
+\pgfdeclareimage[height=0.3cm]{maven-logo-small}{images/Maven_logo.jpg}
+\logo{\pgfuseimage{maven-logo-small}}
+
+\AtBeginSection
+{%
+\begin{frame}<beamer>
+  \frametitle{Contenido} 
+  \tableofcontents[currentsection, hideallsubsections]%
+\end{frame}
+}
+
+%\AtBeginSubsection
+%{%
+%\begin{frame}<beamer>
+%  \frametitle{Contenido}
+%  \tableofcontents[currentsection,currentsubsection]
+%\end{frame}
+%}
+
+\beamerdefaultoverlayspecification{<+->}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+  \frametitle{Contenido}  
+  \tableofcontents[hideallsubsections]
+\end{frame}
+
+
+<%= @slides %>
+
+\end{document}
+
+\usetheme{default}
+\usetheme{JuanLesPins}
+\usetheme{Goettingen}
+\usetheme{Szeged}
+\usetheme{Warsaw}
+
+\usecolortheme{crane}
+
+\usefonttheme{serif}
+\usefonttheme{structuresmallcapsserif}
+
+
+
+

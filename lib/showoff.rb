@@ -36,7 +36,7 @@ class ShowOff < Sinatra::Application
   attr_reader :cached_image_size
 
   set :views, File.dirname(__FILE__) + '/../views'
-  set :public, File.dirname(__FILE__) + '/../public'
+  set :public_folder, File.dirname(__FILE__) + '/../public'
 
   set :verbose, false
   set :pres_dir, '.'
@@ -46,22 +46,22 @@ class ShowOff < Sinatra::Application
     super(app)
     @logger = Logger.new(STDOUT)
     @logger.formatter = proc { |severity,datetime,progname,msg| "#{progname} #{msg}\n" }
-    @logger.level = options.verbose ? Logger::DEBUG : Logger::WARN
+    @logger.level = settings.verbose ? Logger::DEBUG : Logger::WARN
 
     dir = File.expand_path(File.join(File.dirname(__FILE__), '..'))
     @logger.debug(dir)
 
     showoff_dir = File.expand_path(File.join(File.dirname(__FILE__), '..'))
-    options.pres_dir ||= Dir.pwd
+    settings.pres_dir ||= Dir.pwd
     @root_path = "."
 
-    options.pres_dir = File.expand_path(options.pres_dir)
-    if (options.pres_file)
-      ShowOffUtils.presentation_config_file = options.pres_file
+    settings.pres_dir = File.expand_path(settings.pres_dir)
+    if (settings.pres_file)
+      ShowOffUtils.presentation_config_file = settings.pres_file
     end
     @cached_image_size = {}
-    @logger.debug options.pres_dir
-    @pres_name = options.pres_dir.split('/').pop
+    @logger.debug settings.pres_dir
+    @pres_name = settings.pres_dir.split('/').pop
     require_ruby_files
   end
 
@@ -71,12 +71,12 @@ class ShowOff < Sinatra::Application
   end
 
   def require_ruby_files
-    Dir.glob("#{options.pres_dir}/*.rb").map { |path| require path }
+    Dir.glob("#{settings.pres_dir}/*.rb").map { |path| require path }
   end
 
   helpers do
     def load_section_files(section)
-      section = File.join(options.pres_dir, section)
+      section = File.join(settings.pres_dir, section)
       files = if File.directory? section
         Dir.glob("#{section}/**/*").sort
       else
@@ -87,16 +87,16 @@ class ShowOff < Sinatra::Application
     end
 
     def css_files
-      Dir.glob("#{options.pres_dir}/*.css").map { |path| File.basename(path) }
+      Dir.glob("#{settings.pres_dir}/*.css").map { |path| File.basename(path) }
     end
 
     def js_files
-      Dir.glob("#{options.pres_dir}/*.js").map { |path| File.basename(path) }
+      Dir.glob("#{settings.pres_dir}/*.js").map { |path| File.basename(path) }
     end
 
 
     def preshow_files
-      Dir.glob("#{options.pres_dir}/_preshow/*").map { |path| File.basename(path) }.to_json
+      Dir.glob("#{settings.pres_dir}/_preshow/*").map { |path| File.basename(path) }.to_json
     end
 
     # todo: move more behavior into this class
@@ -115,10 +115,8 @@ class ShowOff < Sinatra::Application
       end
     end
 
-
-    def process_markdown(name, content, static=false, pdf=false)
-
-      # if there are no !SLIDE markers, then make every H1 define a new slide
+	def fetch_slides name, content
+	  # if there are no !SLIDE markers, then make every H1 define a new slide
       unless content =~ /^\<?!SLIDE/m
         content = content.gsub(/^# /m, "<!SLIDE>\n# ")
       end
@@ -138,6 +136,13 @@ class ShowOff < Sinatra::Application
       end
 
       slides.delete_if {|slide| slide.empty? }
+      
+      slides
+	end
+
+    def process_markdown(name, content, static=false, pdf=false)
+
+	  slides = fetch_slides(name, content)
 
       final = ''
       if slides.size > 1
@@ -187,7 +192,7 @@ class ShowOff < Sinatra::Application
       paths.pop
       path = paths.join('/')
       replacement_prefix = static ?
-        ( pdf ? %(img src="file://#{options.pres_dir}/#{path}) : %(img src="./file/#{path}) ) :
+        ( pdf ? %(img src="file://#{settings.pres_dir}/#{path}) : %(img src="./file/#{path}) ) :
         %(img src="/image/#{path})
       slide.gsub(/img src=\"([^\/].*?)\"/) do |s|
         img_path = File.join(path, $1)
@@ -265,7 +270,7 @@ class ShowOff < Sinatra::Application
     end
 
     def get_slides_html(static=false, pdf=false)
-      sections = ShowOffUtils.showoff_sections(options.pres_dir, @logger)
+      sections = ShowOffUtils.showoff_sections(settings.pres_dir, @logger)
       files = []
       if sections
         data = ''
@@ -279,7 +284,7 @@ class ShowOff < Sinatra::Application
             files = files.flatten
             files = files.select { |f| f =~ /.md$/ }
             files.each do |f|
-              fname = f.gsub(options.pres_dir + '/', '').gsub('.md', '')
+              fname = f.gsub(settings.pres_dir + '/', '').gsub('.md', '')
               data << process_markdown(fname, File.read(f), static, pdf)
             end
           end
@@ -294,7 +299,7 @@ class ShowOff < Sinatra::Application
         if pre
           css_file = File.join(File.dirname(__FILE__), '..', pre, css_file)
         else
-          css_file = File.join(options.pres_dir, css_file)
+          css_file = File.join(settings.pres_dir, css_file)
         end
         css_content += File.read(css_file)
       end
@@ -308,7 +313,7 @@ class ShowOff < Sinatra::Application
         if pre
           js_file = File.join(File.dirname(__FILE__), '..', pre, js_file)
         else
-          js_file = File.join(options.pres_dir, js_file)
+          js_file = File.join(settings.pres_dir, js_file)
         end
         js_content += File.read(js_file)
       end
@@ -327,6 +332,79 @@ class ShowOff < Sinatra::Application
         @asset_path = "./"
       end
       erb :index
+    end
+    
+    def beamer(static=true)
+      if static
+        @title = ShowOffUtils.showoff_title
+        html_slides = get_slides_html(static)
+        
+        @slides = to_latex html_slides
+        @asset_path = "./"
+      end
+      erb :beamer
+    end
+    
+    def to_latex html_slides
+		html_slides
+		
+		slides = Nokogiri::XML.parse("<slides>" + html_slides + "</slides>")
+		
+		html = "%Slides\n"
+		slides.xpath("slides/div/div").each do |slide|
+			html << process_slide(slide)	
+		end		
+				
+		html
+    end
+    
+    def process_slide slide    
+		ref = slide.attr("ref")
+		p "Slide: #{ref}"
+		html = ""
+		html << "\\begin{frame}\n"			
+						
+		title = ""
+		notes = ""
+		slide.xpath("node()").each do |node|
+			html << process_content(node)
+		end			
+				
+		html << "\\end{frame}\n"		
+		html << "\n\n"
+		html
+    end
+    
+    def process_content node
+		html = ""
+		n = node.name()
+	
+		case n
+		when "h1"
+		  title = node.text
+		  html << "\\frametitle{#{title}}\n" 	
+		when "p" 
+		  if node.attr("class") == 'notes'
+			notes = node.text	
+			html << "%Notes: #{notes}\n" if not notes.empty?		
+		  end				  
+		when "ul"
+			html << "\\begin{itemize}\n"
+			node.xpath("li").each do |li|
+				html << "\\item #{li.text}\n"
+			end
+			html << "\\end{itemize}\n"
+		else					
+			if not node.text.strip.empty?
+				p "Unrecognized node: #{node}"	
+				
+				html << "\\begin{verbatim}\n"
+				html << "#{node.text}\n"
+				html << "\\end{verbatim}\n"					
+			end
+		end 
+		
+		html   
     end
 
     def presenter
@@ -361,10 +439,10 @@ class ShowOff < Sinatra::Application
         assets << href if href
       end
 
-      css = Dir.glob("#{options.public}/**/*.css").map { |path| path.gsub(options.public + '/', '') }
+      css = Dir.glob("#{settings.public}/**/*.css").map { |path| path.gsub(settings.public + '/', '') }
       assets << css
 
-      js = Dir.glob("#{options.public}/**/*.js").map { |path| path.gsub(options.public + '/', '') }
+      js = Dir.glob("#{settings.public}/**/*.js").map { |path| path.gsub(settings.public + '/', '') }
       assets << js
 
       assets.uniq.join("\n")
@@ -433,7 +511,7 @@ class ShowOff < Sinatra::Application
         # Set up file dir
         file_dir = File.join(out, 'file')
         FileUtils.makedirs(file_dir)
-        pres_dir = showoff.options.pres_dir
+        pres_dir = showoff.settings.pres_dir
 
         # ..., copy all user-defined styles and javascript files
         Dir.glob("#{pres_dir}/*.{css,js}").each { |path|
@@ -460,6 +538,73 @@ class ShowOff < Sinatra::Application
         end
       end
     end
+    
+   def self.do_beamer(what)
+      what = "beamer" if !what
+
+      # Nasty hack to get the actual ShowOff module
+      showoff = ShowOff.new
+      while !showoff.is_a?(ShowOff)
+        showoff = showoff.instance_variable_get(:@app)
+      end
+      name = showoff.instance_variable_get(:@pres_name)
+      path = showoff.instance_variable_get(:@root_path)
+      data = showoff.send(what, true)
+      if data.is_a?(File)
+        FileUtils.cp(data.path, "#{name}.pdf")
+      else
+        out = File.expand_path("#{path}/beamer")
+        # First make a directory
+        FileUtils.makedirs(out)
+        # Then write the html
+        
+        file = File.new("#{out}/beamer.tex", "w")
+        file.puts(data)
+        file.close
+                
+        # Now copy all the js and css
+        #my_path = File.join( File.dirname(__FILE__), '..', 'public')
+        #["js", "css"].each { |dir|
+        #  FileUtils.copy_entry("#{my_path}/#{dir}", "#{out}/#{dir}")
+        #}
+        # And copy the directory
+        #Dir.glob("#{my_path}/#{name}/*").each { |subpath|
+        #  base = File.basename(subpath)
+        #  next if "static" == base
+        #  next unless File.directory?(subpath) || base.match(/\.(css|js)$/)
+        #  FileUtils.copy_entry(subpath, "#{out}/#{base}")
+        #}
+
+        # Set up file dir
+        file_dir = File.join(out, 'file')
+        FileUtils.makedirs(file_dir)
+        pres_dir = showoff.settings.pres_dir
+
+        # ..., copy all user-defined styles and javascript files
+        #Dir.glob("#{pres_dir}/*.{css,js}").each { |path|
+        #  FileUtils.copy(path, File.join(file_dir, File.basename(path)))
+        #}
+
+        # ... and copy all needed image files
+        data.scan(/img src=\".\/file\/(.*?)\"/).flatten.each do |path|
+          dir = File.dirname(path)
+          FileUtils.makedirs(File.join(file_dir, dir))
+          FileUtils.copy(File.join(pres_dir, path), File.join(file_dir, path))
+        end
+        # copy images from css too
+        #Dir.glob("#{pres_dir}/*.css").each do |css_path|
+        #  File.open(css_path) do |file|
+        #    data = file.read
+        #    data.scan(/url\((.*)\)/).flatten.each do |path|
+        #      @logger.debug path
+        #      dir = File.dirname(path)
+        #      FileUtils.makedirs(File.join(file_dir, dir))
+        #      FileUtils.copy(File.join(pres_dir, path), File.join(file_dir, path))
+        #    end
+        #  end
+        #end
+      end
+    end
 
    def eval_ruby code
      eval(code).to_s
@@ -475,7 +620,7 @@ class ShowOff < Sinatra::Application
 
   get %r{(?:image|file)/(.*)} do
     path = params[:captures].first
-    full_path = File.join(options.pres_dir, path)
+    full_path = File.join(settings.pres_dir, path)
     send_file full_path
   end
 
